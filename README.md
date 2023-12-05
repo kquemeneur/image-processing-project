@@ -5,6 +5,5 @@ School project for the image analysis and processing course
 - Se déplacer dans le dossier *image-processing-project* : `cd image-processing-project`
 ## Conda environment initialization 
 - Créer l'environement : `conda create --name image_processing_env python=3`
-- Installer les dépendances nécessaires : `conda install --name image_processing_env numpy scipy scikit-learn scikit-image opencv matplotlib keras`
-- Installer la suite des dépendances nécessaires (plus long) : `conda install --name image_processing_env tensorflow pytorch` 
+- Installer les dépendances nécessaires : `conda install --name image_processing_env numpy scipy scikit-learn scikit-image opencv matplotlib keras tensorflow pytorch`
 - Activer l'environnement : `conda activate image_processing_env`
