@@ -16,6 +16,9 @@ CELEB_IDENTITY_FILE = "./celeb_mappings/identity_CelebA.txt"
 CELEB_ATTR_LIST_FILE = "./celeb_mappings/list_attr_celeba.txt"
 CELEB_LANDMARKS_FILE = "./celeb_mappings/list_landmarks_align_celeba.txt"
 
+"""
+Méthode pour charger les images et leurs labels dans des listes qu'on retourne à la fin du traitement
+"""
 def load_images_from_folder_and_file_list(images_folder_path: Path, file_list: list):
     images = []
     labels = []
@@ -32,7 +35,9 @@ def load_images_from_folder_and_file_list(images_folder_path: Path, file_list: l
                 print(f"Error loading image: {img_path} - {e}")
     return np.array(images), np.array(labels)
 
-
+"""
+Classe FaceDataset correspondant à un ensemble de données relatives aux images)
+"""
 class FaceDataset:
     # celeb_number : number of most represented celeb to choose for the dataset
     def __init__(self, celeb_number: int):
@@ -42,8 +47,9 @@ class FaceDataset:
         self.landmarks = []
         self.n = celeb_number
         self.initialize()
-
-    # If a pickle exist for the images, retrieve from the pickle, else load images and dump them in a pickle
+    """
+    Fonction d'initialisation du dataset
+    """
     def initialize(
             self,
             images_folder: Path = IMAGES_FOLDER_PATH,
@@ -52,15 +58,18 @@ class FaceDataset:
             celeb_landmarks_file: Path = CELEB_LANDMARKS_FILE,
             face_images_pickle: Path = FACE_IMAGES_PICKLE_PATH,
             face_labels_pickle: Path = FACE_LABELS_PICKLE_PATH):
+        # If a pickle exist for the images, retrieve from the pickle
         if Path(FACE_IMAGES_PICKLE_PATH).is_file() and Path(FACE_LABELS_PICKLE_PATH).is_file():
             self.retrieve_faces_from_pickle(face_images_pickle, face_labels_pickle)
-        else:
+        else: # else load images and dump them in a pickle
             self.retrieve_faces_from_scratch(
                 images_folder,
                 celeb_identity_file,
                 celeb_attr_file,
                 celeb_landmarks_file)
-
+    """
+    Récupérer les données du dataset via un fichier pickle
+    """
     def retrieve_faces_from_pickle(
             self,
             images_pkl_path: Path = FACE_IMAGES_PICKLE_PATH,
@@ -75,6 +84,9 @@ class FaceDataset:
         self.vectors = face_images_loaded
         self.labels = face_labels_loaded
 
+    """
+    Récupérer les données du dataset à partir du dossier d'images et des fichiers d'attributs
+    """
     def retrieve_faces_from_scratch(
             self,
             images_folder: Path = IMAGES_FOLDER_PATH,
@@ -111,7 +123,10 @@ class FaceDataset:
 
         self.vectors = face_images
         self.labels = face_labels
-
+    """
+    Séparer le jeu de données en un ensemble d'apprentissage et un ensemble de test
+    Retourne les deux ensembles
+    """
     def split(self):
         # TODO : check if dataset is initialized, if not return exception
         self.X_train, self.X_test, self.Y_train, self.Y_test = train_test_split(
@@ -123,13 +138,9 @@ class FaceDataset:
 
 
 """ ------------------ ~ MAIN ALGORITHM ~ ------------------ """
-# TODO extract the most representated celeb pictures to use it as train dataset
-
 face_dataset = FaceDataset(10)
 X_train, X_test, Y_train, Y_test = face_dataset.split()
 print(len(X_train))
-
-# TODO store images with pickle
 
 # TODO Calculate vector distance (Eigenface)
     # TODO Chose attributes to compare (just the eyes for example)
