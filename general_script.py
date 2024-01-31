@@ -1,27 +1,33 @@
 import pathlib
 from pathlib import Path
+
+import cv2
 import pandas as pd
 import numpy as np
 import os
 from sklearn.model_selection import train_test_split
 import cv2 as cv
 import pickle
+import random
+from matplotlib import pyplot as plt
 
 # Path to the folder containing your images
 
 IMAGES_FOLDER_PATH = './media/img_align_celeba'
-FACE_IMAGES_PICKLE_PATH = './face_images.pkl'
-FACE_LABELS_PICKLE_PATH = './face_labels.pkl'
+FACES_PICKLE_PATH = './faces.pkl'
 CELEB_IDENTITY_FILE = "./celeb_mappings/identity_CelebA.txt"
 CELEB_ATTR_LIST_FILE = "./celeb_mappings/list_attr_celeba.txt"
 CELEB_LANDMARKS_FILE = "./celeb_mappings/list_landmarks_align_celeba.txt"
 
 """
-Méthode pour charger les images et leurs labels dans des listes qu'on retourne à la fin du traitement
+Méthode pour charger :
+ - les images (leur vecteur de pixels)
+ - leur index (correspondant à leur nom de fichier) 
+Les listes sont retournées à la fin du traitement
 """
-def load_images_from_folder_and_file_list(images_folder_path: Path, file_list: list):
+def load_images_vectors_from_folder(images_folder_path: Path, file_list: list):
     images = []
-    labels = []
+    indexes = []
     for index, filename in enumerate(os.listdir(images_folder_path)):
         if filename in file_list:
             img_path = os.path.join(images_folder_path, filename)
@@ -30,11 +36,31 @@ def load_images_from_folder_and_file_list(images_folder_path: Path, file_list: l
                 img = cv.resize(img, (100, 100))  # Resize image as needed
                 img = cv.cvtColor(img, cv.COLOR_BGR2RGB)  # Convert BGR to RGB
                 images.append(img)
-                labels.append(index)  # Assign label index
+                indexes.append(index)  # Assign label index
             except Exception as e:
                 print(f"Error loading image: {img_path} - {e}")
-    return np.array(images), np.array(labels)
+    images = np.array(images)
+    # reshape to 1D vector
+    n_samples, height, width, bgr = images.shape
+    images = images.reshape(n_samples, height * width * bgr)
+    return images
 
+"""
+Méthode pour récupérer les eigen faces moyenne pour chaque classe (visage de célébrité)
+"""
+def get_mean_eigen_faces_per_class(faces: list):
+    meanEigenList = []
+    for vec_array in faces["Vector"]:
+        mean, eigenVectorsList = cv2.PCACompute(np.array(vec_array, dtype=np.float32), mean=None, maxComponents=20)
+        meanEigenList.append(mean)
+    return meanEigenList
+
+"""
+Méthode pour supprimer les fichiers pickle
+"""
+def clear_pickle_files():
+    if Path(FACES_PICKLE_PATH).exists():
+        os.remove(FACES_PICKLE_PATH)
 """
 Classe FaceDataset correspondant à un ensemble de données relatives aux images)
 """
@@ -42,9 +68,7 @@ class FaceDataset:
     # celeb_number : number of most represented celeb to choose for the dataset
     def __init__(self, celeb_number: int):
         self.vectors = []
-        self.labels = []
-        self.attr = []
-        self.landmarks = []
+        self.faces = pd.DataFrame(columns=["Filename", "Identity", "Attributes", "Vector"])
         self.n = celeb_number
         self.initialize()
     """
@@ -56,11 +80,10 @@ class FaceDataset:
             celeb_identity_file: Path = CELEB_IDENTITY_FILE,
             celeb_attr_file: Path = CELEB_ATTR_LIST_FILE,
             celeb_landmarks_file: Path = CELEB_LANDMARKS_FILE,
-            face_images_pickle: Path = FACE_IMAGES_PICKLE_PATH,
-            face_labels_pickle: Path = FACE_LABELS_PICKLE_PATH):
+            faces_pickle: Path = FACES_PICKLE_PATH):
         # If a pickle exist for the images, retrieve from the pickle
-        if Path(FACE_IMAGES_PICKLE_PATH).is_file() and Path(FACE_LABELS_PICKLE_PATH).is_file():
-            self.retrieve_faces_from_pickle(face_images_pickle, face_labels_pickle)
+        if Path(faces_pickle).is_file():
+            self.retrieve_faces_from_pickle(faces_pickle)
         else: # else load images and dump them in a pickle
             self.retrieve_faces_from_scratch(
                 images_folder,
@@ -72,17 +95,12 @@ class FaceDataset:
     """
     def retrieve_faces_from_pickle(
             self,
-            images_pkl_path: Path = FACE_IMAGES_PICKLE_PATH,
-            labels_pkl_path: Path = FACE_LABELS_PICKLE_PATH):
+            faces_pkl_path: Path = FACES_PICKLE_PATH):
+        # open and load pickle files
+        with open(faces_pkl_path, 'rb') as f:
+            loaded_faces = pickle.load(f)
 
-        with open(images_pkl_path, 'rb') as f:
-            face_images_loaded = pickle.load(f)
-
-        with open(labels_pkl_path, 'rb') as f:
-            face_labels_loaded = pickle.load(f)
-
-        self.vectors = face_images_loaded
-        self.labels = face_labels_loaded
+        self.faces = loaded_faces
 
     """
     Récupérer les données du dataset à partir du dossier d'images et des fichiers d'attributs
@@ -98,6 +116,31 @@ class FaceDataset:
         attr_file = Path(celeb_attr_file)
         landmarks_file = Path(celeb_landmarks_file)
 
+        most_represented_filenames_list, most_represented_identity_list = self.extract_most_represented_faces(identity_file)
+        self.faces["Filename"] = most_represented_filenames_list
+        self.faces["Identity"] = most_represented_identity_list
+        # retrieve and associate attributes to the previously extracted images
+        attr_matrix_cols = pd.read_csv(attr_file, delim_whitespace=True, nrows=1).columns
+        attr_matrix = pd.read_csv(attr_file, delim_whitespace=True, usecols=attr_matrix_cols)
+        faces_attr = []
+        for file in self.faces["Filename"]:
+            faces_attr.append(attr_matrix.loc[attr_matrix['Filename'] == file].values[0][1:])
+        self.faces['Attributes'] = faces_attr
+
+        # Load images vectors
+        face_images_vectors = load_images_vectors_from_folder(images_folder, most_represented_filenames_list)
+        self.faces["Vector"] = face_images_vectors.tolist()
+
+        self.vectors = face_images_vectors.tolist()
+
+        # save faces in pickle file
+        with open(FACES_PICKLE_PATH, 'wb') as file:
+            pickle.dump(self.faces, file)
+
+    """
+    Associate image with their identity and extract most represented ones
+    """
+    def extract_most_represented_faces(self, identity_file):
         # process the identity file to have a matrix which we will use to classify the faces
         identity_matrix = pd.read_csv(identity_file, sep=" ", header=None)
         identity_matrix.columns = ["FileName", "Label"]
@@ -105,24 +148,12 @@ class FaceDataset:
         # find and extract as a list which labels are more represented
         most_represented_labels = identity_matrix['Label'].value_counts()[:self.n].index.values
         most_represented_extract = identity_matrix[identity_matrix['Label'].isin(most_represented_labels)]
-        most_represented_pictures = most_represented_extract["FileName"].tolist()
+        # most_represented_pictures : array of most represented faces filenames we want to extract
+        most_represented_filenames_list = most_represented_extract["FileName"].tolist()
+        most_represented_identity_list = most_represented_extract["Label"].tolist()
 
-        # Load images and labels
-        face_images, face_labels = load_images_from_folder_and_file_list(images_folder, most_represented_pictures)
-        print(face_images[0].shape)
+        return most_represented_filenames_list, most_represented_identity_list
 
-        images = np.array(face_images)
-        print(images.shape)
-        n_samples, height, width, bgr = images.shape
-        face_images = images.reshape(n_samples, height * width, bgr)
-
-        with open(FACE_IMAGES_PICKLE_PATH, 'wb') as file:
-            pickle.dump(face_images, file)
-        with open(FACE_LABELS_PICKLE_PATH, 'wb') as file:
-            pickle.dump(face_labels, file)
-
-        self.vectors = face_images
-        self.labels = face_labels
     """
     Séparer le jeu de données en un ensemble d'apprentissage et un ensemble de test
     Retourne les deux ensembles
@@ -131,18 +162,64 @@ class FaceDataset:
         # TODO : check if dataset is initialized, if not return exception
         self.X_train, self.X_test, self.Y_train, self.Y_test = train_test_split(
             self.vectors,
-            self.labels,
+            self.faces.identity,
             test_size=0.3,
             random_state=42)
         return self.X_train, self.X_test, self.Y_train, self.Y_test
 
+    def sort_vectors_by_identity(self):
+        vectors_by_identity = self.faces.groupby('Identity')["Vector"].apply(list).reset_index()
+        return vectors_by_identity
 
 """ ------------------ ~ MAIN ALGORITHM ~ ------------------ """
-face_dataset = FaceDataset(10)
-X_train, X_test, Y_train, Y_test = face_dataset.split()
-print(len(X_train))
+# clear_pickle_files()
+face_dataset = FaceDataset(30)
+#vectors_by_identity = face_dataset.sort_vectors_by_identity()
+#X_train, X_test, Y_train, Y_test = face_dataset.split()
 
-# TODO Calculate vector distance (Eigenface)
-    # TODO Chose attributes to compare (just the eyes for example)
-    # TODO Make average of each class
+# Calculate mean and eigenFaces for all face vectors
+face_vectors_as_numpy_arr = np.array(face_dataset.faces["Vector"].tolist(), dtype=np.uint8)
+print(f"shape2 {face_vectors_as_numpy_arr.shape}")
+# TODO pickle tout ça parce que ça prend du temps
+mean, eigenVectors = cv2.PCACompute(face_vectors_as_numpy_arr, maxComponents=20)
+# with open(Path('./eigen_vectors.pkl'), 'wb') as file:
+#    pickle.dump(eigenVectors, file)
+# Calculate average eigen face for each class (celebrity)
+# mean_eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
+# with open(Path('./mean_eigen_faces.pkl'), 'wb') as file:
+#    pickle.dump(mean_eigen_faces_per_class, file)
+
+# with open(Path('./mean_eigen_faces.pkl'), 'rb') as f:
+#     mean_eigen_faces_per_class = pickle.load(f)
+# with open(Path('./eigen_vectors.pkl'), 'rb') as f:
+#     eigenVectors = pickle.load(f)
+# Pick random face image
+rand_index = random.randint(0, len(face_dataset.faces.Identity))
+random_face = face_dataset.faces.iloc[rand_index]
+print(len(random_face.Vector))
+# projection = np.dot(np.array(random_face.Vector, dtype=np.uint8), mean)
+# plt.imshow(np.array(random_face.Vector, dtype=np.uint8).reshape(100, 100, 3))
+# plt.show()
+# for vec in vectors_by_identity.iloc[3].Vector[:5]:
+    #print(vec)
+#     plt.imshow(np.array(vec, dtype=np.uint8).reshape(100, 100, 3))
+#     plt.show()
+# print(projection.shape)
+print(eigenVectors.shape)
+print(eigenVectors[0].shape)
+
+print(eigenVectors[0])
+print(mean.shape)
+# TOFIX Mean eigen face for each class have wrong shape(expect 30 components but get array of 30000)
+# TODO Compare random image to averages eigen faces via distance euclidienne
+min_distance = 1000000
+nearest_label = None
+for eigenvec in eigenVectors[:3]:
+    plt.imshow(eigenvec.reshape(100, 100, 3))
+    plt.show()
+    distance = np.linalg.norm(mean[0] - random_face)
+    if distance < min_distance:
+        min_distance = distance
+print(min_distance)
+# TODO Retrieve the closest images and compare
 
