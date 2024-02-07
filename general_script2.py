@@ -130,7 +130,7 @@ input_folder = './media/top30/'
 output_folder = './media/top30_generated/'
 organize_generated_images_by_labels(input_folder, output_folder)
 
-"""Créer et découper le dataset"""
+"""Créer le dataset et répartir proportionnellement les images"""
 
 def prepare_dataset(input_f, output_f, train=0.2, validation=0.2, test=0.6):
     #verification que le ratio total est bien égal à 1
@@ -180,3 +180,19 @@ def prepare_dataset(input_f, output_f, train=0.2, validation=0.2, test=0.6):
 input_generated_f = './media/top30_generated'
 output_dataset_f = './media/dataset'
 prepare_dataset(input_generated_f,output_dataset_f)
+
+"compter le nombre d'images dans chaque ensemble"
+def count_imgs_by_set (main_f):
+    total = 0
+
+    #parcourir tous les sous-dossier
+    for root, dirs, files in os.walk(main_f):
+        img_f = [file for file in files if file.lower().endswith(('jpg'))]
+        total = total + len(img_f)
+    
+    return total
+
+# Exemple d'utilisation
+print(f"il y a  {count_imgs_by_set('./media/dataset/train/')} images dans le dossier train ")
+print(f"il y a  {count_imgs_by_set('./media/dataset/validation/')} images dans le dossier validation ")
+print(f"il y a  {count_imgs_by_set('./media/dataset/test/')} images dans le dossier test ")
