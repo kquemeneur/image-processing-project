@@ -25,12 +25,14 @@ def get_most_represented_labels(file_path, top_count=30):
 
     return top_labels
 
+""" **** TEST AFFICHER TOP 30 ****
 # Appel de la fonction "top classes"
 top_labels = get_most_represented_labels(file_path)
 
 # Afficher le top 30 
 for i, labels in enumerate(top_labels, start=1):
     print(i, labels)
+"""
 
 """Deplacer les images correspondant au top 30 dans les sous dossiers"""
 def create_folders(top30_folder, top_labels) :
@@ -41,9 +43,9 @@ def create_folders(top30_folder, top_labels) :
         
 def organize_images_by_labels(file_path, image_folder, top30_folder, top_count=30):
     # Recuper le top 30 des classes
-    top_label = get_most_represented_labels(file_path, top_count=30)
+    top_labels = get_most_represented_labels(file_path)
 
-    create_folders(top30_folder, top_label)
+    create_folders(top30_folder, top_labels)
     # Lire le fichier texte et deplacer les images au bon endroit
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -58,4 +60,4 @@ def organize_images_by_labels(file_path, image_folder, top30_folder, top_count=3
                     shutil.copy(source_path, destination_folder)
 
 
-organize_images_by_labels(file_path, image_folder, top30_folder, top_count=30)  
+organize_images_by_labels(file_path, image_folder, top30_folder)  
