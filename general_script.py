@@ -2,6 +2,7 @@ import pathlib
 from pathlib import Path
 
 import cv2
+import pandas
 import pandas as pd
 import numpy as np
 import os
@@ -20,38 +21,27 @@ CELEB_ATTR_LIST_FILE = "./celeb_mappings/list_attr_celeba.txt"
 CELEB_LANDMARKS_FILE = "./celeb_mappings/list_landmarks_align_celeba.txt"
 
 """
-Méthode pour charger :
- - les images (leur vecteur de pixels)
- - leur index (correspondant à leur nom de fichier) 
-Les listes sont retournées à la fin du traitement
-"""
-def load_images_vectors_from_folder(images_folder_path: Path, file_list: list):
-    images = []
-    indexes = []
-    for index, filename in enumerate(os.listdir(images_folder_path)):
-        if filename in file_list:
-            img_path = os.path.join(images_folder_path, filename)
-            try:
-                img = cv.imread(img_path)
-                img = cv.resize(img, (100, 100))  # Resize image as needed
-                img = cv.cvtColor(img, cv.COLOR_BGR2RGB)  # Convert BGR to RGB
-                images.append(img)
-                indexes.append(index)  # Assign label index
-            except Exception as e:
-                print(f"Error loading image: {img_path} - {e}")
-    images = np.array(images)
-    # reshape to 1D vector
-    n_samples, height, width, bgr = images.shape
-    images = images.reshape(n_samples, height * width * bgr)
-    return images
-
-"""
 Méthode pour récupérer les eigen faces moyenne pour chaque classe (visage de célébrité)
 """
-def get_mean_eigen_faces_per_class(faces: list):
+def get_mean_eigen_faces_per_class(identity_faces: list):
     meanEigenList = []
-    for vec_array in faces["Vector"]:
+    for vec_array in identity_faces["Vector"]:
         mean, eigenVectorsList = cv2.PCACompute(np.array(vec_array, dtype=np.float32), mean=None, maxComponents=20)
+        """plt.imshow(mean.reshape(100, 100, 3).astype(int))
+        plt.show()
+        plt.close()
+
+        fig, axes = plt.subplots(nrows=4, ncols=5,
+                                 figsize=(10, 8))
+        normalized_vectors = (eigenVectorsList * 255)
+        for i, ax in enumerate(axes.flat):
+            ax.imshow(normalized_vectors[i].reshape(100, 100, 3))
+            ax.axis('off')  # Turn off axis
+            ax.set_title(f'Image {i + 1}')  # Set title for each image
+        plt.tight_layout()
+        plt.show()
+        plt.close()"""
+
         meanEigenList.append(mean)
     return meanEigenList
 
@@ -67,7 +57,6 @@ Classe FaceDataset correspondant à un ensemble de données relatives aux images
 class FaceDataset:
     # celeb_number : number of most represented celeb to choose for the dataset
     def __init__(self, celeb_number: int):
-        self.vectors = []
         self.faces = pd.DataFrame(columns=["Filename", "Identity", "Attributes", "Vector"])
         self.n = celeb_number
         self.initialize()
@@ -113,25 +102,36 @@ class FaceDataset:
             celeb_landmarks_file: Path = CELEB_LANDMARKS_FILE):
         # retrieve celeb identity file, attr file and landmarks file
         identity_file = Path(celeb_identity_file)
-        attr_file = Path(celeb_attr_file)
-        landmarks_file = Path(celeb_landmarks_file)
+        # attr_file = Path(celeb_attr_file)
+        # landmarks_file = Path(celeb_landmarks_file)
 
         most_represented_filenames_list, most_represented_identity_list = self.extract_most_represented_faces(identity_file)
         self.faces["Filename"] = most_represented_filenames_list
         self.faces["Identity"] = most_represented_identity_list
         # retrieve and associate attributes to the previously extracted images
-        attr_matrix_cols = pd.read_csv(attr_file, delim_whitespace=True, nrows=1).columns
-        attr_matrix = pd.read_csv(attr_file, delim_whitespace=True, usecols=attr_matrix_cols)
-        faces_attr = []
-        for file in self.faces["Filename"]:
-            faces_attr.append(attr_matrix.loc[attr_matrix['Filename'] == file].values[0][1:])
-        self.faces['Attributes'] = faces_attr
+        # attr_matrix_cols = pd.read_csv(attr_file, delim_whitespace=True, nrows=1).columns
+        # attr_matrix = pd.read_csv(attr_file, delim_whitespace=True, usecols=attr_matrix_cols)
+        # faces_attr = []
+        # for file in self.faces["Filename"]:
+        #    faces_attr.append(attr_matrix.loc[attr_matrix['Filename'] == file].values[0][1:])
+        # self.faces['Attributes'] = faces_attr
 
-        # Load images vectors
-        face_images_vectors = load_images_vectors_from_folder(images_folder, most_represented_filenames_list)
-        self.faces["Vector"] = face_images_vectors.tolist()
-
-        self.vectors = face_images_vectors.tolist()
+        # load images vectors from filename and associate it to the right face
+        for index, filename in enumerate(self.faces["Filename"]):
+            # re-construct file path
+            img_path = os.path.join(images_folder, filename)
+            try:
+                # retrieve image vector
+                img = cv.imread(img_path)
+                img = cv.resize(img, (100, 100))
+                img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+                height, width, bgr = img.shape
+                # reshape to 1D vector
+                img = img.reshape(height * width * bgr)
+                # store into self.faces dataframe
+                self.faces.at[index, "Vector"] = img
+            except Exception as e:
+                print(f"Error loading image: {img_path} - {e}")
 
         # save faces in pickle file
         with open(FACES_PICKLE_PATH, 'wb') as file:
@@ -172,20 +172,25 @@ class FaceDataset:
         return vectors_by_identity
 
 """ ------------------ ~ MAIN ALGORITHM ~ ------------------ """
-# clear_pickle_files()
+clear_pickle_files()
 face_dataset = FaceDataset(30)
-#vectors_by_identity = face_dataset.sort_vectors_by_identity()
+
+vectors_by_identity = face_dataset.sort_vectors_by_identity()
+
+print(vectors_by_identity.iloc[0]['Vector'])
+for vec in vectors_by_identity.iloc[0]['Vector'][:2]:
+    plt.imshow(np.array(vec, dtype=np.uint8).reshape(100, 100, 3))
+    plt.show()
 #X_train, X_test, Y_train, Y_test = face_dataset.split()
 
 # Calculate mean and eigenFaces for all face vectors
 face_vectors_as_numpy_arr = np.array(face_dataset.faces["Vector"].tolist(), dtype=np.uint8)
-print(f"shape2 {face_vectors_as_numpy_arr.shape}")
-# TODO pickle tout ça parce que ça prend du temps
-mean, eigenVectors = cv2.PCACompute(face_vectors_as_numpy_arr, maxComponents=20)
+
+mean, eigenVectors = cv2.PCACompute(face_vectors_as_numpy_arr, mean=None, maxComponents=5)
 # with open(Path('./eigen_vectors.pkl'), 'wb') as file:
 #    pickle.dump(eigenVectors, file)
 # Calculate average eigen face for each class (celebrity)
-# mean_eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
+mean_eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
 # with open(Path('./mean_eigen_faces.pkl'), 'wb') as file:
 #    pickle.dump(mean_eigen_faces_per_class, file)
 
@@ -205,21 +210,17 @@ print(len(random_face.Vector))
 #     plt.imshow(np.array(vec, dtype=np.uint8).reshape(100, 100, 3))
 #     plt.show()
 # print(projection.shape)
-print(eigenVectors.shape)
-print(eigenVectors[0].shape)
-
-print(eigenVectors[0])
-print(mean.shape)
-# TOFIX Mean eigen face for each class have wrong shape(expect 30 components but get array of 30000)
+distance = np.linalg.norm(mean.astype(int) - random_face.Vector)
+print(distance)
 # TODO Compare random image to averages eigen faces via distance euclidienne
-min_distance = 1000000
-nearest_label = None
-for eigenvec in eigenVectors[:3]:
-    plt.imshow(eigenvec.reshape(100, 100, 3))
-    plt.show()
-    distance = np.linalg.norm(mean[0] - random_face)
-    if distance < min_distance:
-        min_distance = distance
-print(min_distance)
+# min_distance = 1000000
+# nearest_label = None
+# for mean in mean_faces:
+#    plt.imshow(eigenvec.reshape(100, 100, 3))
+#    plt.show()
+#    distance = np.linalg.norm(mean.astype(int) - random_face)
+#    if distance < min_distance:
+#        min_distance = distance
+# print(min_distance)
 # TODO Retrieve the closest images and compare
 
