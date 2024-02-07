@@ -1,6 +1,7 @@
 from collections import defaultdict
 import heapq
 import os
+import random
 import shutil
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.image_utils import img_to_array 
@@ -129,3 +130,53 @@ input_folder = './media/top30/'
 output_folder = './media/top30_generated/'
 organize_generated_images_by_labels(input_folder, output_folder)
 
+"""Créer et découper le dataset"""
+
+def prepare_dataset(input_f, output_f, train=0.2, validation=0.2, test=0.6):
+    #verification que le ratio total est bien égal à 1
+    ratio = train + validation + test
+
+    if ratio !=1:
+        print(f"Error :le ratio total est de : {ratio} ")
+    else:
+        #creer le dossier de sortie s'il n'existe pas
+        if not os.path.exists(output_f):
+            os.makedirs(output_f)
+        
+        #parcourir tout les sous dossier du dossier d'entrée
+        for subdir, dirs, files in os.walk(input_f):
+            #creer le sous dossier dans le dossier de sortie
+            output_subf = os.path.join(output_f,os.path.relpath(subdir,input_f))
+
+            #recuperer la liste de toute les images dans le sous-dossier
+            imgs = [file for file in files if file.lower().endswith(('.jpg'))]
+
+            #calculer le nombre d'image pour chaque sous-dossier
+            total = len(imgs)
+            #repartir les images pour chaque ensemble (entrainement, validation, test)
+            train_imgs_number = int(total * train)
+            validation_imgs_number = int(total * validation)
+            test_imgs_number = int (total * test)
+
+            #melanger la liste des images
+            random.shuffle(imgs)
+
+            #copier les images dans les sous-dossier correspondant
+            for i, img in enumerate(imgs):
+                src_path = os.path.join(subdir, img)
+                if i < train_imgs_number:
+                    destination_f = os.path.join(output_f, 'train', os.path.relpath(subdir, input_f))
+                elif i < train_imgs_number + validation_imgs_number:
+                    destination_f = os.path.join(output_f, 'validation', os.path.relpath(subdir, input_f))
+                else:
+                    destination_f = os.path.join(output_f, 'test', os.path.relpath(subdir, input_f))
+                    
+                if not os.path.exists(destination_f):
+                    os.makedirs(destination_f)
+               
+                destination_path = os.path.join(destination_f, img)
+                shutil.copy(src_path, destination_path)
+            
+input_generated_f = './media/top30_generated'
+output_dataset_f = './media/dataset'
+prepare_dataset(input_generated_f,output_dataset_f)
