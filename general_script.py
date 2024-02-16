@@ -25,12 +25,18 @@ Méthode pour récupérer les eigen faces moyenne pour chaque classe (visage de 
 """
 def get_mean_eigen_faces_per_class(identity_faces: list):
     meanEigenList = []
-    for vec_array in identity_faces["Vector"]:
-        mean, eigenVectorsList = cv2.PCACompute(np.array(vec_array, dtype=np.float32), mean=None, maxComponents=20)
+    eigenVectorsList = []
+    print(identity_faces.Identity)
+    output_df = pandas.DataFrame(columns=["Identity", "MeanFace", "EigenVectors"])
+    for index, vec_array in enumerate(identity_faces["Vector"]):
+        mean, eigenVectors = cv2.PCACompute(np.array(vec_array, dtype=np.float32), mean=None, maxComponents=20)
+        identity = identity_faces["Identity"][index]
+        output_df.at[index, "Identity"] = identity
+        output_df.at[index, "MeanFace"] = mean
+        output_df.at[index, "EigenVectors"] = eigenVectors
         """plt.imshow(mean.reshape(100, 100, 3).astype(int))
         plt.show()
         plt.close()
-
         fig, axes = plt.subplots(nrows=4, ncols=5,
                                  figsize=(10, 8))
         normalized_vectors = (eigenVectorsList * 255)
@@ -41,9 +47,7 @@ def get_mean_eigen_faces_per_class(identity_faces: list):
         plt.tight_layout()
         plt.show()
         plt.close()"""
-
-        meanEigenList.append(mean)
-    return meanEigenList
+    return output_df
 
 """
 Méthode pour supprimer les fichiers pickle
@@ -161,8 +165,8 @@ class FaceDataset:
     def split(self):
         # TODO : check if dataset is initialized, if not return exception
         self.X_train, self.X_test, self.Y_train, self.Y_test = train_test_split(
-            self.vectors,
-            self.faces.identity,
+            self.faces.Vector,
+            self.faces.Identity,
             test_size=0.3,
             random_state=42)
         return self.X_train, self.X_test, self.Y_train, self.Y_test
@@ -172,55 +176,55 @@ class FaceDataset:
         return vectors_by_identity
 
 """ ------------------ ~ MAIN ALGORITHM ~ ------------------ """
-clear_pickle_files()
+# clear_pickle_files()
 face_dataset = FaceDataset(30)
 
 vectors_by_identity = face_dataset.sort_vectors_by_identity()
-
-print(vectors_by_identity.iloc[0]['Vector'])
-for vec in vectors_by_identity.iloc[0]['Vector'][:2]:
-    plt.imshow(np.array(vec, dtype=np.uint8).reshape(100, 100, 3))
-    plt.show()
-#X_train, X_test, Y_train, Y_test = face_dataset.split()
 
 # Calculate mean and eigenFaces for all face vectors
 face_vectors_as_numpy_arr = np.array(face_dataset.faces["Vector"].tolist(), dtype=np.uint8)
 
 mean, eigenVectors = cv2.PCACompute(face_vectors_as_numpy_arr, mean=None, maxComponents=5)
-# with open(Path('./eigen_vectors.pkl'), 'wb') as file:
-#    pickle.dump(eigenVectors, file)
-# Calculate average eigen face for each class (celebrity)
-mean_eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
-# with open(Path('./mean_eigen_faces.pkl'), 'wb') as file:
-#    pickle.dump(mean_eigen_faces_per_class, file)
 
-# with open(Path('./mean_eigen_faces.pkl'), 'rb') as f:
-#     mean_eigen_faces_per_class = pickle.load(f)
-# with open(Path('./eigen_vectors.pkl'), 'rb') as f:
-#     eigenVectors = pickle.load(f)
+# Calculate average eigen face for each class (celebrity)
+# eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
+# with open(Path('./mean_eigen_faces.pkl'), 'wb') as file:
+#    pickle.dump(eigen_faces_per_class, file)
+
+with open(Path('./mean_eigen_faces.pkl'), 'rb') as f:
+    eigen_faces_per_class = pickle.load(f)
+
 # Pick random face image
 rand_index = random.randint(0, len(face_dataset.faces.Identity))
 random_face = face_dataset.faces.iloc[rand_index]
+
 print(len(random_face.Vector))
 # projection = np.dot(np.array(random_face.Vector, dtype=np.uint8), mean)
 # plt.imshow(np.array(random_face.Vector, dtype=np.uint8).reshape(100, 100, 3))
 # plt.show()
-# for vec in vectors_by_identity.iloc[3].Vector[:5]:
-    #print(vec)
-#     plt.imshow(np.array(vec, dtype=np.uint8).reshape(100, 100, 3))
-#     plt.show()
 # print(projection.shape)
-distance = np.linalg.norm(mean.astype(int) - random_face.Vector)
-print(distance)
-# TODO Compare random image to averages eigen faces via distance euclidienne
-# min_distance = 1000000
-# nearest_label = None
-# for mean in mean_faces:
-#    plt.imshow(eigenvec.reshape(100, 100, 3))
-#    plt.show()
-#    distance = np.linalg.norm(mean.astype(int) - random_face)
-#    if distance < min_distance:
-#        min_distance = distance
-# print(min_distance)
-# TODO Retrieve the closest images and compare
+
+# Compare random image to averages eigen faces via distance euclidienne
+def predict_nearest_identity(eigen_faces, input_face):
+    min_distance = None
+    nearest_label = None
+    for index, identity in enumerate(eigen_faces["Identity"]):
+        distance = np.linalg.norm(eigen_faces.at[index, "MeanFace"].astype(int) - input_face)
+        if index == 0:
+            min_distance = distance
+        elif distance < min_distance:
+            min_distance = distance
+            nearest_label = identity
+    # Retrieve the closest images and compare
+    return nearest_label, min_distance
+
+# TODO: Train/test split and get prediction score
+X_train, X_test, Y_train, Y_test = face_dataset.split()
+print(X_train)
+predictions = []
+for index, face in enumerate(X_train):
+    predicted_label, min_dist = predict_nearest_identity(eigen_faces_per_class, face)
+    predictions.append(predicted_label)
+print(predictions[:10])
+print(Y_train[:10])
 
