@@ -3,9 +3,14 @@ import heapq
 import os
 import random
 import shutil
+import matplotlib.pyplot as plt
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.image_utils import img_to_array 
 from PIL import Image
+from keras.layers import Conv2D, MaxPooling2D
+from keras.layers import Activation, Dropout, Flatten, Dense
+from keras.models import Sequential
+from keras import backend as K
 
 """Trier le top 30 des classes les plus représentées"""
 def get_most_represented_labels(file_path, top_count=30):
@@ -185,14 +190,138 @@ prepare_dataset(input_generated_f,output_dataset_f)
 def count_imgs_by_set (main_f):
     total = 0
 
-    #parcourir tous les sous-dossier
+    #parcourir tous les sous-dossiers
     for root, dirs, files in os.walk(main_f):
         img_f = [file for file in files if file.lower().endswith(('jpg'))]
         total = total + len(img_f)
     
     return total
 
-# Exemple d'utilisation
+# Connaitre le nombre d'image dans chaque dossier
 print(f"il y a  {count_imgs_by_set('./media/dataset/train/')} images dans le dossier train ")
 print(f"il y a  {count_imgs_by_set('./media/dataset/validation/')} images dans le dossier validation ")
 print(f"il y a  {count_imgs_by_set('./media/dataset/test/')} images dans le dossier test ")
+
+
+K.set_image_data_format('channels_last')
+
+def modele_define(img_w, img_h, n_labels):
+    if K.image_data_format() == 'channels_first':
+        shape_i = (3, img_w, img_h)
+    else:
+        shape_i = (img_w, img_h, 3)
+
+    # The layers
+    modele = Sequential()
+    modele.add(Conv2D(32, (3, 3), shape_i=shape_i, data_f='channels_last'))
+    modele.add(Activation('relu'))
+    modele.add(MaxPooling2D(pool_size=(2, 2)))
+
+    modele.add(Conv2D(32, (3, 3), data_f='channels_last'))
+    modele.add(Activation('relu'))
+    modele.add(MaxPooling2D(pool_size=(2, 2)))
+
+    modele.add(Conv2D(64, (3, 3), data_f='channels_last'))
+    modele.add(Activation('relu'))
+    modele.add(MaxPooling2D(pool_size=(2, 2)))
+
+    modele.add(Flatten())
+    modele.add(Dense(64))
+    modele.add(Activation('relu'))
+    modele.add(Dropout(0.5))
+    modele.add(Dense(n_labels, activation='softmax'))
+
+    # Lancer le modele (lost, optimizer, metrics)
+    modele.compile(loss='categorical_crossentropy',
+                  optimizer='rmsprop',
+                  metrics=['accuracy'])
+    return modele
+
+# Fichiers d'entrainement et de validation
+train_folder = './medias/dataset/train'
+val_folder = './medias/dataset/validation/'
+
+#definir les paramètres
+img_w, img_h = 150, 150
+epochs = 50
+batch_size = 16
+n_labels = 30  # nombre de labels
+modele_name = 'model.h5'
+
+""" entrainement et validation du modèle """
+
+n_train_samples = count_imgs_by_set(train_folder)
+n_val_samples = count_imgs_by_set(val_folder)
+
+# Generation des données d'entrainement
+train_data_genered = ImageDataGenerator(
+    rescale=1./255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True)
+
+# Data generation for testing
+test_data_genered = ImageDataGenerator(rescale=1./255)
+
+# Generation for training
+train_generator = train_data_genered.flow_from_directory(
+    train_folder,
+    target_size=(img_w, img_h),
+    batch_size=batch_size,
+    class_mode='categorical')
+
+# Generation for validation
+validation_generator = test_data_genered.flow_from_directory(
+    val_folder,
+    target_size=(img_w, img_h),
+    batch_size=batch_size,
+    class_mode='categorical')
+
+
+modele = modele_define(img_w, img_h, n_labels)
+
+# Variables to store the training environnement
+history = modele.fit(
+    train_generator,
+    steps_per_epoch=n_train_samples // batch_size,
+    epochs=epochs,
+    validation_data=validation_generator,
+    validation_steps=n_val_samples // batch_size
+)
+
+# Enregistrer le modèle
+modele.save_weights(modele_name)
+
+
+
+"""" Affiche des résultats"""
+def print_results(train_acc, val_acc, train_loss, val_loss) :
+    
+    plt.figure(figsize=(12, 6))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(train_acc, label='Train Accuracy')
+    plt.plot(val_acc, label='Validation Accuracy')
+    plt.title('Training and Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(train_loss, label='Train Loss')
+    plt.plot(val_loss, label='Validation Loss')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.show()
+
+
+    # Enregistrement des résultats d'entraînement dans des variables
+train_acc = history.history['accuracy']
+val_acc = history.history['val_acc']
+train_loss = history.history['loss']
+val_loss = history.history['val_loss']
+    
+print_results(train_acc, val_acc, train_loss, val_loss) 
