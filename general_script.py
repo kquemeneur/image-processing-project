@@ -153,17 +153,15 @@ class FaceDataset:
 # clear_pickle_files()
 face_dataset = FaceDataset(30)
 
-# train/test split
+# train/validation subset split
 train_set, validation_set = face_dataset.split()
 
+# get images vectors group by identity
 vectors_by_identity = face_dataset.sort_vectors_by_identity(train_set)
 
-# calculate average eigen face for each class (celebrity)
+# calculate average eigen face for each class (celebrity identity)
 eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
-print(eigen_faces_per_class["MeanFace"])
-# pick random face image
-# rand_index = random.randint(0, len(face_dataset.faces.Identity))
-# random_face = face_dataset.faces.iloc[rand_index]
+
 
 """
 Method for comparing input face image to average eigen faces via euclidian distance
@@ -183,18 +181,22 @@ def predict_nearest_identity(eigen_faces, input_face):
     return nearest_label, min_distance
 
 
-# get predictions
+# get predictions from validation subset
+
 predictions = []
 correct_guesses = 0
-
-for index, face in enumerate(validation_set):
+# for each face image vector in the validation subset
+for index, face in enumerate(validation_set["Vector"]):
+    # predict the nearest label
     predicted_label, min_dist = predict_nearest_identity(eigen_faces_per_class, face)
+    # store prediction
     predictions.append(predicted_label)
-    print(f"pred : {predicted_label}, truth: {validation_set.iloc[index]['Identity']}")
+    # if the predicted label match the expected label, then increment the number of correct guesses
     if predicted_label == validation_set.iloc[index]['Identity']:
         correct_guesses = correct_guesses + 1
 
 # get precision score from predictions
-print(correct_guesses)
-print(len(validation_set['Identity']))
+validation_set_length = len(validation_set['Identity'])
+precision = correct_guesses / validation_set_length
+print(f"Based of the {face_dataset.n} most represented celebrities and for {validation_set_length} faces in the validation subset, the precision is {float('{:.3f}'.format(precision))}%")
 
