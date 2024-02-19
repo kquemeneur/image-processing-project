@@ -65,7 +65,7 @@ def organize_images_by_labels(file_path, image_folder, top30_folder, top_count=3
                     shutil.copy(source_path, destination_folder)
 
 """ Defition des liens"""
-file_path = './media/identity_CelebA.txt'
+file_path = './celeb_mappings/identity_CelebA.txt'
 image_folder = './media/img_align_celeba/'
 top30_folder = './media/top30/'
 
@@ -206,22 +206,20 @@ print(f"il y a  {count_imgs_by_set('./media/dataset/test/')} images dans le doss
 K.set_image_data_format('channels_last')
 
 def modele_define(img_w, img_h, n_labels):
+    shape_i = (img_w, img_h, 3)
     if K.image_data_format() == 'channels_first':
         shape_i = (3, img_w, img_h)
-    else:
-        shape_i = (img_w, img_h, 3)
-
     # The layers
     modele = Sequential()
-    modele.add(Conv2D(32, (3, 3), shape_i=shape_i, data_f='channels_last'))
+    modele.add(Conv2D(32, (3, 3), input_shape=shape_i))
     modele.add(Activation('relu'))
     modele.add(MaxPooling2D(pool_size=(2, 2)))
 
-    modele.add(Conv2D(32, (3, 3), data_f='channels_last'))
+    modele.add(Conv2D(32, (3, 3)))
     modele.add(Activation('relu'))
     modele.add(MaxPooling2D(pool_size=(2, 2)))
 
-    modele.add(Conv2D(64, (3, 3), data_f='channels_last'))
+    modele.add(Conv2D(64, (3, 3)))
     modele.add(Activation('relu'))
     modele.add(MaxPooling2D(pool_size=(2, 2)))
 
@@ -238,8 +236,8 @@ def modele_define(img_w, img_h, n_labels):
     return modele
 
 # Fichiers d'entrainement et de validation
-train_folder = './medias/dataset/train/'
-val_folder = './medias/dataset/validation/'
+train_folder = './media/dataset/train/'
+val_folder = './media/dataset/validation/'
 
 #definir les paramètres
 img_w, img_h = 150, 150
