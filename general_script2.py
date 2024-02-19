@@ -31,7 +31,7 @@ def get_most_represented_labels(file_path, top_count=30):
     return most_represented_labels
 
 """ **** TEST AFFICHER TOP 30 ****
-# Appel de la fonction "top classes"
+# Appel de la fonction "top labels"
 top_labels = get_most_represented_labels(file_path)
 
 # Afficher le top 30 
@@ -238,12 +238,12 @@ def modele_define(img_w, img_h, n_labels):
     return modele
 
 # Fichiers d'entrainement et de validation
-train_folder = './medias/dataset/train'
+train_folder = './medias/dataset/train/'
 val_folder = './medias/dataset/validation/'
 
 #definir les paramètres
 img_w, img_h = 150, 150
-epochs = 50
+epochs = 30
 batch_size = 16
 n_labels = 30  # nombre de labels
 modele_name = 'model.h5'
@@ -260,17 +260,16 @@ train_data_genered = ImageDataGenerator(
     zoom_range=0.2,
     horizontal_flip=True)
 
-# Data generation for testing
+
 test_data_genered = ImageDataGenerator(rescale=1./255)
 
-# Generation for training
 train_generator = train_data_genered.flow_from_directory(
     train_folder,
     target_size=(img_w, img_h),
     batch_size=batch_size,
     class_mode='categorical')
 
-# Generation for validation
+# Generation des données pour validation
 validation_generator = test_data_genered.flow_from_directory(
     val_folder,
     target_size=(img_w, img_h),
@@ -280,7 +279,7 @@ validation_generator = test_data_genered.flow_from_directory(
 
 modele = modele_define(img_w, img_h, n_labels)
 
-# Variables to store the training environnement
+# Variables pour enregistrer l'environnement de test 
 history = modele.fit(
     train_generator,
     steps_per_epoch=n_train_samples // batch_size,
