@@ -10,7 +10,6 @@ from sklearn.model_selection import train_test_split
 import cv2 as cv
 import pickle
 import random
-from matplotlib import pyplot as plt
 
 # Path to the folder containing your images
 
@@ -24,9 +23,6 @@ CELEB_LANDMARKS_FILE = "./celeb_mappings/list_landmarks_align_celeba.txt"
 Méthode pour récupérer les eigen faces moyenne pour chaque classe (visage de célébrité)
 """
 def get_mean_eigen_faces_per_class(identity_faces: list):
-    meanEigenList = []
-    eigenVectorsList = []
-    print(identity_faces.Identity)
     output_df = pandas.DataFrame(columns=["Identity", "MeanFace", "EigenVectors"])
     for index, vec_array in enumerate(identity_faces["Vector"]):
         mean, eigenVectors = cv2.PCACompute(np.array(vec_array, dtype=np.float32), mean=None, maxComponents=20)
@@ -34,19 +30,6 @@ def get_mean_eigen_faces_per_class(identity_faces: list):
         output_df.at[index, "Identity"] = identity
         output_df.at[index, "MeanFace"] = mean
         output_df.at[index, "EigenVectors"] = eigenVectors
-        """plt.imshow(mean.reshape(100, 100, 3).astype(int))
-        plt.show()
-        plt.close()
-        fig, axes = plt.subplots(nrows=4, ncols=5,
-                                 figsize=(10, 8))
-        normalized_vectors = (eigenVectorsList * 255)
-        for i, ax in enumerate(axes.flat):
-            ax.imshow(normalized_vectors[i].reshape(100, 100, 3))
-            ax.axis('off')  # Turn off axis
-            ax.set_title(f'Image {i + 1}')  # Set title for each image
-        plt.tight_layout()
-        plt.show()
-        plt.close()"""
     return output_df
 
 """
@@ -112,13 +95,6 @@ class FaceDataset:
         most_represented_filenames_list, most_represented_identity_list = self.extract_most_represented_faces(identity_file)
         self.faces["Filename"] = most_represented_filenames_list
         self.faces["Identity"] = most_represented_identity_list
-        # retrieve and associate attributes to the previously extracted images
-        # attr_matrix_cols = pd.read_csv(attr_file, delim_whitespace=True, nrows=1).columns
-        # attr_matrix = pd.read_csv(attr_file, delim_whitespace=True, usecols=attr_matrix_cols)
-        # faces_attr = []
-        # for file in self.faces["Filename"]:
-        #    faces_attr.append(attr_matrix.loc[attr_matrix['Filename'] == file].values[0][1:])
-        # self.faces['Attributes'] = faces_attr
 
         # load images vectors from filename and associate it to the right face
         for index, filename in enumerate(self.faces["Filename"]):
@@ -163,48 +139,36 @@ class FaceDataset:
     Retourne les deux ensembles
     """
     def split(self):
-        # TODO : check if dataset is initialized, if not return exception
-        self.X_train, self.X_test, self.Y_train, self.Y_test = train_test_split(
-            self.faces.Vector,
-            self.faces.Identity,
+        train_set, validation_set = train_test_split(
+            self.faces,
             test_size=0.3,
             random_state=42)
-        return self.X_train, self.X_test, self.Y_train, self.Y_test
+        return train_set, validation_set
 
-    def sort_vectors_by_identity(self):
-        vectors_by_identity = self.faces.groupby('Identity')["Vector"].apply(list).reset_index()
+    def sort_vectors_by_identity(self, faces_dataset):
+        vectors_by_identity = faces_dataset.groupby('Identity')["Vector"].apply(list).reset_index()
         return vectors_by_identity
 
 """ ------------------ ~ MAIN ALGORITHM ~ ------------------ """
 # clear_pickle_files()
 face_dataset = FaceDataset(30)
 
-vectors_by_identity = face_dataset.sort_vectors_by_identity()
+# train/test split
+train_set, validation_set = face_dataset.split()
 
-# Calculate mean and eigenFaces for all face vectors
-face_vectors_as_numpy_arr = np.array(face_dataset.faces["Vector"].tolist(), dtype=np.uint8)
+vectors_by_identity = face_dataset.sort_vectors_by_identity(train_set)
 
-mean, eigenVectors = cv2.PCACompute(face_vectors_as_numpy_arr, mean=None, maxComponents=5)
+# calculate average eigen face for each class (celebrity)
+eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
+print(eigen_faces_per_class["MeanFace"])
+# pick random face image
+# rand_index = random.randint(0, len(face_dataset.faces.Identity))
+# random_face = face_dataset.faces.iloc[rand_index]
 
-# Calculate average eigen face for each class (celebrity)
-# eigen_faces_per_class = get_mean_eigen_faces_per_class(vectors_by_identity)
-# with open(Path('./mean_eigen_faces.pkl'), 'wb') as file:
-#    pickle.dump(eigen_faces_per_class, file)
-
-with open(Path('./mean_eigen_faces.pkl'), 'rb') as f:
-    eigen_faces_per_class = pickle.load(f)
-
-# Pick random face image
-rand_index = random.randint(0, len(face_dataset.faces.Identity))
-random_face = face_dataset.faces.iloc[rand_index]
-
-print(len(random_face.Vector))
-# projection = np.dot(np.array(random_face.Vector, dtype=np.uint8), mean)
-# plt.imshow(np.array(random_face.Vector, dtype=np.uint8).reshape(100, 100, 3))
-# plt.show()
-# print(projection.shape)
-
-# Compare random image to averages eigen faces via distance euclidienne
+"""
+Method for comparing input face image to average eigen faces via euclidian distance
+Return prediction of the nearest face identity
+"""
 def predict_nearest_identity(eigen_faces, input_face):
     min_distance = None
     nearest_label = None
@@ -215,16 +179,22 @@ def predict_nearest_identity(eigen_faces, input_face):
         elif distance < min_distance:
             min_distance = distance
             nearest_label = identity
-    # Retrieve the closest images and compare
+    # retrieve the closest images and compare
     return nearest_label, min_distance
 
-# TODO: Train/test split and get prediction score
-X_train, X_test, Y_train, Y_test = face_dataset.split()
-print(X_train)
+
+# get predictions
 predictions = []
-for index, face in enumerate(X_train):
+correct_guesses = 0
+
+for index, face in enumerate(validation_set):
     predicted_label, min_dist = predict_nearest_identity(eigen_faces_per_class, face)
     predictions.append(predicted_label)
-print(predictions[:10])
-print(Y_train[:10])
+    print(f"pred : {predicted_label}, truth: {validation_set.iloc[index]['Identity']}")
+    if predicted_label == validation_set.iloc[index]['Identity']:
+        correct_guesses = correct_guesses + 1
+
+# get precision score from predictions
+print(correct_guesses)
+print(len(validation_set['Identity']))
 
