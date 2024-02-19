@@ -238,7 +238,7 @@ def modele_define(img_w, img_h, n_labels):
     return modele
 
 # Fichiers d'entrainement et de validation
-train_folder = './medias/dataset/train'
+train_folder = './medias/dataset/train/'
 val_folder = './medias/dataset/validation/'
 
 #definir les paramètres
