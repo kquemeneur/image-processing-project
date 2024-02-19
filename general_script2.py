@@ -243,7 +243,7 @@ val_folder = './medias/dataset/validation/'
 
 #definir les paramètres
 img_w, img_h = 150, 150
-epochs = 50
+epochs = 30
 batch_size = 16
 n_labels = 30  # nombre de labels
 modele_name = 'model.h5'
